@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+
+<html lang='en'>
+    <head>
+        <link rel="stylesheet"" href="style.css"></style>
+        <meta charset="utf-8"/>
+        <title> Game </title>
+        <script src="game.js"></script>
+        <script src="hero.js"></script>
+        <script src="robot.js"></script>
+    </head>
+    <body onload="init()">
+        <div class='panel panel-default' id='container'>
+        <div id='errorDisplayer'></div>
+        <div class='parent'>
+            <div class='child sidebyside'>
+                <p> Round: </p>
+                <p id='roundBoard'> 0 </p>
+            </div>
+            <div class='child sidebyside'>
+                <p> Player's Score: </p>
+                <p id='playerBoard'> 0 </p>
+            </div>
+            <div class='child sidebyside'>
+                <p> Robot's Score: </p>
+                <p id='robotBoard'> 0 </p>
+            </div>
+        </div>
+        <table id="gameBoard">
+        </table>
+        <button id='action' onclick='startPlay()'>Start Game</button>
+        </div>
+        <script>
+            let board = [['0','0','0','0','0','0','0','0','0','0'],['0','0','0','0','0','0','0','0','0','0'],['0','0','0','0','0','0','0','0','0','0'],['0','0','0','0','0','0','0','0','0','0'],['0','0','0','0','0','0','0','0','0','0'],['0','0','0','0','0','0','0','0','0','0'],['0','0','0','0','0','0','0','0','0','0'],['0','0','0','0','0','0','0','0','0','0'],['0','0','0','0','0','0','0','0','0','0'],['0','0','0','0','0','0','0','0','0','0'],['0','0','0','0','0','0','0','0','0','0']];
+            let playerScore, robotScore;
+            let player = null;
+            let robots = [];
+            let state;
+            let treasures = [];
+            let rounds;
+
+            //Initialises the table.
+            //Only called at the start of the document
+            //Uses code from Lecture 15 
+            function init() {
+                table = document.getElementById("gameBoard");
+
+                for (let i = 0; i < 10; i++) {
+                    let row = document.createElement('tr');
+                    table.appendChild(row);
+
+                    for (let j = 0; j < 10; j++) {
+                        let td = document.createElement('td');
+                        let txt = document.createTextNode("");
+                        
+                        td.appendChild(txt);
+                        td.addEventListener("click",setup.bind(null,i,j));
+                        row.appendChild(td);
+                    }
+                }
+
+                document.addEventListener("keydown",play);
+                state = "setup";
+            }
+
+            //Updates content of table & scoreboard elements
+            function update() {
+                let table = document.getElementById("gameBoard");
+
+                //Updates each table cell with their current value (nothing if 0, default state)
+                for (let i = 0; i < table.rows.length; i++) {
+                    for (let j = 0; j < table.rows[i].cells.length; j++) {
+                        table.rows[i].cells[j].innerHTML = display(board[j][i]);
+                    }
+                }
+
+                //Ensures each scoreboard's displaying the correct info.
+                rounds++;
+                let roundBoard = document.getElementById("roundBoard");
+                roundBoard.innerHTML = rounds;
+                
+                let playerBoard = document.getElementById("playerBoard");
+                playerBoard.innerHTML = playerScore;
+
+                let robotBoard = document.getElementById("robotBoard");
+                robotBoard.innerHTML = robotScore;
+
+                if (treasures.length == 0 || !player.alive) {
+                    end();
+                }
+            }
+
+            //Setup phase 
+            function setup(x,y,event) {
+                //deals with not performing click event when in play/end stages
+                if (state != "setup") {
+                    return;
+                }
+                
+                playerScore = 0;
+                robotScore = 0;
+                rounds = 1;
+                let icon = null;
+
+
+
+                //prompts user for input into board
+                icon = prompt("What icon do you want to place at (" + x + "," + y +")?");
+
+                //deals with no input/cancel
+                if (icon == null) {
+                    showError("Please input something in the field.", 'RedBG');
+                    return;
+                }
+
+                //deals with multiple character entry
+                if (icon.length > 1) {
+                    showError("Please only enter one character.", 'RedBG');
+                    return;
+                }
+
+                //deals with input validation
+                switch (icon) {
+                    case "h":
+                        //makes sure only one hero is placed
+                        if (player == null) {
+                            player = new Hero(x,y);
+                            event.target.innerHTML = icon;
+                            board[y].splice(x,1,icon);
+                        } else {
+                            //Shows corresponding error
+                            showError("Error: Already one Hero.",'RedBG');
+                        }
+                        break;
+                    case "k":
+                        //Adds robot
+                        robots.push(new Robot(x,y));
+                        event.target.innerHTML = icon;
+
+                        //Adds icon to the board
+                        board[y].splice(x,1,icon);
+                        break;
+                    case "1":
+                    case "2":
+                    case "3":
+                    case "4":
+                    case "5":
+                    case "6":
+                    case "7":
+                    case "8":
+                    case "9":
+                        //Adds treasures
+                        treasures.push([x,y]);
+                        event.target.innerHTML = icon;
+
+                        //Adds icon to the board
+                        board[y].splice(x,1,icon);
+                        break;
+                    case "0":
+                    case "o":
+                        //Adds obstacle
+                        event.target.innerHTML = icon;
+
+                        //Adds icon to the board
+                        board[y].splice(x,1,icon);
+                        break;
+                    default:
+                        //Deals with invalid character entry
+                        showError("Error: Invalid key entered.","RedBG");
+                }
+                
+            }
+
+            //Starts play stage of the game
+            function startPlay() {
+                //Deals with the program having no player on setup end.
+                if (player == null) {
+                    showError("Error: No Hero!","RedBG")
+                    return;
+                }
+                
+                //Changes program state
+                state = "play";
+
+                //Deals with ending the game if there are no treasures
+                if (treasures.length == 0) {
+                    end();
+                    return;
+                }
+
+                //Changes button action to end the game when pressed
+                button = document.getElementById('action');
+                button.onclick = function() { end(); }
+                button.innerHTML = "End Game";
+            }
+
+
+            //processes moves done by player + processes robot's moves
+            function play(event) {
+                //Deals with inputs at non-play (setup & end)
+                if (state != "play") {
+                    return;
+                }
+
+                //Deals with character entry using function inputHandler from game.js
+                let charEntered = event.keyCode;
+                let nextMove = inputHandler(charEntered);
+
+                if (nextMove == [0,0]) {
+                    return;
+                }
+
+                //Finds destination coords
+                let destX = player.x + nextMove[0];
+                let destY = player.y + nextMove[1];
+
+                //Validates destination coords
+                if (destX > 9 || destX < 0 || destY > 9 || destY < 0) {
+                    return;
+                }
+
+                //Finds the icon that resides at destination
+                let destIcon = board[destY][destX];
+                
+                switch(destIcon) {
+                    case "1":
+                    case "2":
+                    case "3":
+                    case "4":
+                    case "5":
+                    case "6":
+                    case "7":
+                    case "8":
+                    case "9":
+                        playerScore += parseInt(destIcon);
+                        collectTreasure(destX,destY);
+                        break;
+                    case "k":
+                        player.alive = false;
+                        return;
+                }
+
+                if (possibleMove(destX,destY,board) == true) {
+                    //Moves player if possible
+                    board[player.y][player.x] = "0";
+                    board[destY][destX] = "h";
+                    player.move(destX,destY);
+                }
+                
+                update();
+
+                //Gives illusion of AI Thought by disabling the input and forcing user to wait until
+                //AI has taken it's turn (1 - 1.999 secs)
+                if (robots.length > 0) {
+                    state = "robotMove";
+                    setTimeout(robotMove,1000 + Math.floor(Math.random()*1001));
+                }
+            }
+
+            //performs the robot's moves
+            function robotMove() {
+                for (let i = 0; i < robots.length; i++) {
+                    //Finds destination of robot
+                    let destCoord = robots[i].move(player.x,player.y,board);
+                    destIcon = board[destCoord[1]][destCoord[0]];
+
+                    //Collects treasure if present
+                    switch(destIcon) {
+                        case "1":
+                        case "2":
+                        case "3":
+                        case "4":
+                        case "5":
+                        case "6":
+                        case "7":
+                        case "8":
+                        case "9":
+                            //Robot collects treasure
+                            robotScore += parseInt(destIcon);
+                            collectTreasure(destCoord[1],destCoord[0]);
+                            break;
+                        case "h":
+                            //Robot kills the player
+                            board[robots[i].y][robots[i].x] = "0";
+                            board[destCoord[1]][destCoord[0]] = "k";
+
+                            robots[i].x = destCoord[0];
+                            robots[i].y = destCoord[1];
+
+                            player.alive = false;
+                            update();
+                            return;
+                    }
+
+                    board[robots[i].y][robots[i].x] = "0";
+                    board[destCoord[1]][destCoord[0]] = "k";
+                    robots[i].x = destCoord[0];
+                    robots[i].y = destCoord[1];
+                }
+
+                for (let robot in robots) {
+                    if (player.x == robot.x && player.y == robot.y) {
+                        player.alive = false;
+                        return;
+                    }
+                }
+
+                if (robots.length > 0) {
+                    update();
+                }
+
+                state = "play";
+            }
+
+            //ends the game
+            function end() {
+                let text = "";
+                state = "end";
+                if (playerScore > robotScore && player.alive == true) {
+                    text += "Player Wins!";
+                } else if (playerScore < robotScore && player.alive == true || player.alive == false) {
+                    text += "Robots Win!";
+                } else {
+                    text += "Draw!";
+                }
+
+                alert(text);
+                
+                //Removes button to disable all input.
+                let button = document.getElementById("action");
+                button.parentNode.removeChild(button);
+            }
+
+            function showError(text, context) {
+                errorDisplay = document.getElementById('errorDisplayer');
+                errorDisplay.innerHTML = text;
+                errorDisplay.style = "block";
+                errorDisplay.className = context;
+                setTimeout(5000, errorDisplay.style = "none");
+            }
+
+            function collectTreasure(x,y) {
+                for (let i = 0; i < treasures.length; i++) {
+                    if (treasures[i][0] == x && treasures[i][1] == y) {
+                        treasures.splice(i,1);
+                        return;
+                    }
+                }
+            }
+        </script>
+    </body>
+</html>
